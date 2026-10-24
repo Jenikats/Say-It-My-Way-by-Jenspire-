@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#6b3e26"/>
+  <!-- speech bubble -->
+  <path d="M116 140 h280 a40 40 0 0 1 40 40 v130 a40 40 0 0 1 -40 40 h-150 l-70 62 v-62 h-60 a40 40 0 0 1 -40 -40 v-130 a40 40 0 0 1 40 -40 z" fill="#faf7f2"/>
+  <!-- "my words" lines -->
+  <rect x="146" y="196" width="170" height="20" rx="10" fill="#b08968"/>
+  <rect x="146" y="236" width="130" height="20" rx="10" fill="#b08968"/>
+  <rect x="146" y="276" width="90" height="20" rx="10" fill="#b08968"/>
+  <!-- pen -->
+  <g transform="rotate(-40 330 280)">
+    <rect x="300" y="250" width="110" height="34" rx="6" fill="#6b3e26"/>
+    <polygon points="300,250 270,267 300,284" fill="#6b3e26"/>
+    <polygon points="281,261 270,267 281,273" fill="#faf7f2"/>
+    <rect x="392" y="250" width="18" height="34" rx="4" fill="#d4a373"/>
+  </g>
+</svg>

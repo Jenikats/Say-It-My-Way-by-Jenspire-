@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#6b3e26">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Paraphrase">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Paraphrase Coach</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 760px; margin: 1rem auto; padding: 0 1rem; background: #faf7f2; color: #222; }
+  h1 { color: #6b3e26; margin-bottom: .2rem; }
+  nav { display: flex; gap: .3rem; }
+  nav button { flex: 1; background: #e8dccf; color: #6b3e26; }
+  nav button.active { background: #6b3e26; color: #fff; }
+  .card { background: #fff; border-radius: 10px; padding: 1rem; margin: 1rem 0; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .hidden { display: none; }
+  textarea { width: 100%; min-height: 120px; font-size: 1rem; padding: .5rem; box-sizing: border-box; font-family: inherit; }
+  button { background: #6b3e26; color: #fff; border: none; padding: .75rem 1rem; border-radius: 8px; cursor: pointer; margin: .3rem .3rem 0 0; font-size: 1rem; }
+  button.soft { background: #b08968; }
+  mark { background: #ffd6a5; }
+  .miss { background: #ffcad4; padding: 0 3px; border-radius: 3px; margin: 2px; display: inline-block; }
+  .add { background: #caffbf; padding: 0 3px; border-radius: 3px; margin: 2px; display: inline-block; }
+  .tip { color: #555; font-style: italic; }
+  .good { color: #2d6a4f; font-weight: bold; }
+  .note { border-left: 4px solid #b08968; padding-left: .6rem; margin: .6rem 0; white-space: pre-wrap; }
+  label { font-size: 1rem; display: block; margin: .4rem 0; }
+  select { font-size: 1rem; padding: .3rem; max-width: 100%; }
+</style>
+</head>
+<body>
+<h1>Paraphrase Coach</h1>
+<p class="tip">Read it. Hide it. Say it. Write it. Check it.</p>
+<label><input type="checkbox" id="voiceOn" checked> Read instructions out loud</label>
+<label><input type="checkbox" id="awakeOn" checked onchange="toggleAwake()"> Keep screen on</label>
+<label>Voice: <select id="voicePick" onchange="localStorage.setItem('pcVoice', this.value)"></select>
+  <button class="soft" onclick="say('Hi Jenika, this is how I sound.')">Test voice</button></label>
+<nav>
+  <button id="tabB" onclick="tab('b')">Brainstorm</button>
+  <button id="tabP" class="active" onclick="tab('p')">Paraphrase</button>
+</nav>
+
+<div id="brain" class="hidden">
+  <div class="card">
+    <h3>Talk it out</h3>
+    <p class="tip">What is your paper about? What do your sources have in common? What do you want the reader to understand?</p>
+    <button id="micB" onclick="mic('brainText','micB')">Start talking</button>
+    <textarea id="brainText" placeholder="Your ideas appear here (or type them)..."></textarea>
+    <button onclick="saveNote()">Save idea</button>
+    <button class="soft" onclick="say(document.getElementById('brainText').value)">Read it back</button>
+  </div>
+  <div class="card">
+    <h3>Saved ideas</h3>
+    <div id="notes"></div>
+  </div>
+</div>
+
+<div id="para">
+  <div class="card" id="s1">
+    <h3>1. Paste the original passage</h3>
+    <textarea id="original" placeholder="Paste the sentence or paragraph from your source..."></textarea>
+    <button onclick="go(2)">I understand it</button>
+  </div>
+  <div class="card hidden" id="s2">
+    <h3>2. Break it apart</h3>
+    <p>What is the main claim?</p>
+    <textarea id="claim"></textarea>
+    <p>What are the supporting pieces?</p>
+    <textarea id="pieces"></textarea>
+    <button onclick="go(3)">Next: hide the source</button>
+  </div>
+  <div class="card hidden" id="s3">
+    <h3>3. Source hidden. Explain it out loud.</h3>
+    <p class="tip">Talk like you're explaining it to a friend. Rough is fine.</p>
+    <button id="micP" onclick="mic('spoken','micP')">Start talking</button>
+    <textarea id="spoken" placeholder="Your words appear here (or type them)..."></textarea>
+    <button onclick="go(4)">Next: polish it</button>
+  </div>
+  <div class="card hidden" id="s4">
+    <h3>4. Polish it in your voice</h3>
+    <p class="tip">Start with a different subject. Change the structure, not just the words.</p>
+    <textarea id="final"></textarea>
+    <button onclick="check()">Check it</button>
+  </div>
+  <div class="card hidden" id="s5">
+    <h3>5. Check</h3>
+    <p><b>Original</b> (copied phrases highlighted):</p>
+    <p id="origOut"></p>
+    <p id="verdict"></p>
+    <p><b>Key words you may have left out:</b></p>
+    <div id="missing"></div>
+    <p class="tip">Not every word needs to be there. Does your version still carry this idea?</p>
+    <p><b>Words you added:</b></p>
+    <div id="added"></div>
+    <p class="tip">Is anything you added supported by the source?</p>
+    <p><b>Your version:</b></p>
+    <p id="finalOut" class="note"></p>
+    <p class="tip">Did I keep the meaning? Does it sound like me? Did I cite it?</p>
+    <button class="soft" onclick="say(document.getElementById('final').value)">Read mine to me</button>
+    <button class="soft" onclick="go(4)">Revise</button>
+    <button onclick="location.reload()">New passage</button>
+  </div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+let wakeLock = null;
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+function toggleAwake() {
+  if (document.getElementById('awakeOn').checked) keepAwake();
+  else if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && document.getElementById('awakeOn').checked) keepAwake();
+});
+document.addEventListener('click', () => { if (!wakeLock && document.getElementById('awakeOn').checked) keepAwake(); }, { once: true });
+
+const prompts = {
+  1: 'Paste the passage. Read it two or three times until you understand it.',
+  2: 'Break it apart. What is the main claim, and what are the supporting pieces?',
+  3: 'The source is hidden. Explain it out loud, like you are telling a friend.',
+  4: 'Now polish it. Try starting with a different subject, and change the structure.',
+  5: 'Here is your check. Look at the highlighted phrases and the words you may have left out.'
+};
+function say(text) {
+  if (!text || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 0.95;
+  const pick = speechSynthesis.getVoices().find(v => v.name === document.getElementById('voicePick').value);
+  if (pick) u.voice = pick;
+  speechSynthesis.speak(u);
+}
+function voiceOn() { return document.getElementById('voiceOn').checked; }
+function tab(t) {
+  document.getElementById('brain').classList.toggle('hidden', t !== 'b');
+  document.getElementById('para').classList.toggle('hidden', t !== 'p');
+  document.getElementById('tabB').classList.toggle('active', t === 'b');
+  document.getElementById('tabP').classList.toggle('active', t === 'p');
+  if (t === 'b' && voiceOn()) say('Brainstorm. Talk your ideas out loud. Nothing has to be perfect.');
+}
+function go(n) {
+  for (let i = 1; i <= 5; i++) document.getElementById('s' + i).classList.add('hidden');
+  document.getElementById('s' + n).classList.remove('hidden');
+  if (n === 4 && !document.getElementById('final').value) {
+    document.getElementById('final').value = document.getElementById('spoken').value;
+  }
+  window.scrollTo(0, 0);
+  if (voiceOn()) say(prompts[n]);
+}
+let rec = null, listening = false;
+function mic(boxId, btnId) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Voice typing is not available here. Tap the text box and use your keyboard microphone instead.'); return; }
+  const btn = document.getElementById(btnId);
+  if (listening) { rec.stop(); return; }
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.lang = 'en-US';
+  rec.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) document.getElementById(boxId).value += e.results[i][0].transcript.trim() + ' ';
+    }
+  };
+  rec.onend = () => { listening = false; btn.textContent = 'Start talking'; };
+  rec.start();
+  listening = true;
+  btn.textContent = 'Stop';
+}
+function loadNotes() {
+  const notes = JSON.parse(localStorage.getItem('pcNotes') || '[]');
+  const box = document.getElementById('notes');
+  box.innerHTML = notes.length ? '' : '<p class="tip">No saved ideas yet.</p>';
+  notes.slice().reverse().forEach((n, i) => {
+    const idx = notes.length - 1 - i;
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.textContent = n.date + ': ' + n.text;
+    const del = document.createElement('button');
+    del.className = 'soft'; del.textContent = 'Delete';
+    del.onclick = () => { notes.splice(idx, 1); localStorage.setItem('pcNotes', JSON.stringify(notes)); loadNotes(); };
+    div.appendChild(document.createElement('br'));
+    div.appendChild(del);
+    box.appendChild(div);
+  });
+}
+function saveNote() {
+  const t = document.getElementById('brainText').value.trim();
+  if (!t) return;
+  const notes = JSON.parse(localStorage.getItem('pcNotes') || '[]');
+  notes.push({ date: new Date().toLocaleDateString(), text: t });
+  localStorage.setItem('pcNotes', JSON.stringify(notes));
+  document.getElementById('brainText').value = '';
+  loadNotes();
+}
+const STOP = new Set('the a an and or but of to in on at for with by from as is are was were be been being that this these those it its their there they them not only just also than then so such into across over under within between among which who whom whose what when where how why do does did can could should would may might will shall have has had our we you your i my me he she his her him about all any each other more most some very'.split(' '));
+function words(t) { return t.toLowerCase().replace(/[^a-z0-9'\s-]/g, ' ').split(/\s+/).filter(Boolean); }
+function stem(w) { return w.replace(/(ingly|edly|ness|ment|ally|ity|ies|ing|ed|es|ly|al|s)$/, '').slice(0, 6); }
+function keyWords(list) { return [...new Set(list.filter(w => w.length > 3 && !STOP.has(w)))]; }
+function check() {
+  const orig = document.getElementById('original').value;
+  const fin = document.getElementById('final').value;
+  const ow = words(orig), fw = words(fin);
+  const N = 3;
+  const finGrams = new Set();
+  for (let i = 0; i + N <= fw.length; i++) finGrams.add(fw.slice(i, i + N).join(' '));
+  const flagged = new Array(ow.length).fill(false);
+  let hits = 0;
+  for (let i = 0; i + N <= ow.length; i++) {
+    if (finGrams.has(ow.slice(i, i + N).join(' '))) { hits++; for (let j = i; j < i + N; j++) flagged[j] = true; }
+  }
+  document.getElementById('origOut').innerHTML = ow.map((w, i) => flagged[i] ? '<mark>' + w + '</mark>' : w).join(' ');
+  document.getElementById('finalOut').textContent = fin;
+  const v = document.getElementById('verdict');
+  if (hits === 0) { v.className = 'good'; v.textContent = 'No copied 3-word phrases found. Nice work!'; }
+  else { v.className = ''; v.textContent = hits + ' copied phrase(s) found. Technical terms can stay, but try rewording the rest.'; }
+  const oKeys = keyWords(ow), fKeys = keyWords(fw);
+  const fStems = new Set(fKeys.map(stem)), oStems = new Set(oKeys.map(stem));
+  const missing = oKeys.filter(w => !fStems.has(stem(w)));
+  const added = fKeys.filter(w => !oStems.has(stem(w)));
+  document.getElementById('missing').innerHTML = missing.length ? missing.map(w => '<span class="miss">' + w + '</span>').join(' ') : '<span class="good">You covered all the key words.</span>';
+  document.getElementById('added').innerHTML = added.length ? added.map(w => '<span class="add">' + w + '</span>').join(' ') : '<span class="tip">None.</span>';
+  go(5);
+}
+loadNotes();
+
+// Voice picker: natural-sounding voices (Google, Natural, Enhanced, Premium) are listed first
+function loadVoices() {
+  if (!window.speechSynthesis) return;
+  const sel = document.getElementById('voicePick');
+  const score = v => /natural|google|enhanced|premium|neural/i.test(v.name) ? 0 : 1;
+  const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en')).sort((a, b) => score(a) - score(b));
+  if (!voices.length) return;
+  const saved = localStorage.getItem('pcVoice');
+  sel.innerHTML = '';
+  voices.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.name;
+    o.textContent = v.name + ' (' + v.lang + ')';
+    if (v.name === saved) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+loadVoices();
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = loadVoices;
+</script>
+</body>
+</html>
